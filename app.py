@@ -6,33 +6,41 @@ app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-def get_connection():
+def connect_db():
     return psycopg2.connect(DATABASE_URL)
-
-def ensure_table():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS visitors (
-            id INTEGER PRIMARY KEY,
-            count INTEGER NOT NULL
-        );
-    """)
-    cur.execute("SELECT count FROM visitors WHERE id = 1;")
-    if cur.fetchone() is None:
-        cur.execute("INSERT INTO visitors (id, count) VALUES (1, 0);")
-    conn.commit()
-    cur.close()
-    conn.close()
 
 @app.route("/")
 def index():
     if not DATABASE_URL:
         return "DATABASE_URL tanımlı değil ❌"
 
-    ensure_table()
-
-    conn = get_connection()
+    conn = connect_db()
     cur = conn.cursor()
-    cur.execute("UPDATE visitors SET count = count + 1 WHERE id = 1;")
-    cur.execute("SELECT count FROM visitors WHER
+
+    # tablo yoksa oluştur
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS visitors (
+            id SERIAL PRIMARY KEY,
+            count INTEGER
+        )
+    """)
+
+    # satır yoksa ekle
+    cur.execute("SELECT count FROM visitors LIMIT 1")
+    row = cur.fetchone()
+
+    if row is None:
+        cur.execute("INSERT INTO visitors (count) VALUES (1)")
+        visitors = 1
+    else:
+        visitors = row[0] + 1
+        cur.execute("UPDATE visitors SET count = %s", (visitors,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return f"👥 Ziyaretçi Sayısı: {visitors}"
+
+if __name__ == "__main__":
+    app.run()
